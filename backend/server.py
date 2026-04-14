@@ -7,7 +7,6 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 # Import local modules
 from models import (
@@ -503,23 +502,8 @@ async def get_placement_submissions():
 @api_router.post("/ai/ask")
 async def ask_ai(question_data: AIQuestionCreate, current_user: dict = Depends(get_current_user)):
     try:
-        # Initialize AI chat
-        api_key = os.environ.get('EMERGENT_LLM_KEY')
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"user_{current_user['user_id']}",
-            system_message="You are a helpful AI assistant for a placement and alumni platform. Help students with career advice, interview preparation, placement questions, and professional networking tips. Be concise, professional, and encouraging."
-        ).with_model("openai", "gpt-5.2")
-        
-        # Prepare message
-        user_question = question_data.question
-        if question_data.context:
-            user_question = f"Context: {question_data.context}\n\nQuestion: {question_data.question}"
-        
-        user_message = UserMessage(text=user_question)
-        
-        # Get AI response
-        response = await chat.send_message(user_message)
+        # Mock AI response since external library is removed
+        response = f"This is a simulated AI response to your question: '{question_data.question}'. In a real environment, this would connect to an LLM service."
         
         # Save to database
         ai_record = AIQuestion(
