@@ -1,11 +1,11 @@
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime, timezone
 import uuid
 
 # User Models
 class UserBase(BaseModel):
-    email: EmailStr
+    email: str
     full_name: str
     bio: Optional[str] = ""
     skills: Optional[List[str]] = []
@@ -13,14 +13,28 @@ class UserBase(BaseModel):
     company: Optional[str] = ""
     designation: Optional[str] = ""
     profile_picture: Optional[str] = ""
+    college: Optional[str] = ""
+    branch: Optional[str] = ""
+    course: Optional[str] = ""
+    passing_year: Optional[int] = None
+    current_year: Optional[int] = None
+    gender: Optional[str] = ""
+    mobile_number: Optional[str] = ""
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     full_name: str
+    college: Optional[str] = ""
+    branch: Optional[str] = ""
+    course: Optional[str] = ""
+    passing_year: Optional[int] = None
+    current_year: Optional[int] = None
+    gender: Optional[str] = ""
+    mobile_number: Optional[str] = ""
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 class User(UserBase):

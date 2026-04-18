@@ -60,15 +60,15 @@ async def signup(user_data: UserCreate):
     
     # Create user
     hashed_password = get_password_hash(user_data.password)
+    user_dict = user_data.model_dump(exclude={'password'})
     user = UserInDB(
-        email=user_data.email,
-        full_name=user_data.full_name,
+        **user_dict,
         hashed_password=hashed_password,
-        is_verified=True  # Mock verification - set to True immediately
+        is_verified=True
     )
     
-    user_dict = serialize_datetime(user.model_dump())
-    await db.users.insert_one(user_dict)
+    final_user_dict = serialize_datetime(user.model_dump())
+    await db.users.insert_one(final_user_dict)
     
     # Create token
     token = create_access_token({"user_id": user.id, "email": user.email})
@@ -502,8 +502,51 @@ async def get_placement_submissions():
 @api_router.post("/ai/ask")
 async def ask_ai(question_data: AIQuestionCreate, current_user: dict = Depends(get_current_user)):
     try:
-        # Mock AI response since external library is removed
-        response = f"This is a simulated AI response to your question: '{question_data.question}'. In a real environment, this would connect to an LLM service."
+        q = question_data.question.lower()
+        response = ""
+        
+        # 1. Check for Internships (more specific than jobs)
+        if "intern" in q:
+            items = await db.jobs.find({"$or": [{"title": {"$regex": "intern", "$options": "i"}}, {"description": {"$regex": "intern", "$options": "i"}}]}, {"_id": 0}).limit(3).to_list(3)
+            if items:
+                response = "I found these internship opportunities for you:\n" + "\n".join([f"• {j['title']} at {j['company']} ({j['location']})" for j in items])
+            else:
+                response = "I couldn't find any specific internship posts right now. Keep an eye on the Jobs section!"
+        
+        # 2. Check for Jobs
+        elif "job" in q or "work" in q or "vacancy" in q:
+            items = await db.jobs.find({"$or": [{"title": {"$regex": "job", "$options": "i"}}, {"description": {"$regex": "job", "$options": "i"}}]}, {"_id": 0}).limit(3).to_list(3)
+            if items:
+                response = "Here are some job openings I found:\n" + "\n".join([f"• {j['title']} at {j['company']} ({j['location']})" for j in items])
+            else:
+                response = "There are no new job postings at the moment. You can try searching for 'internships' too."
+
+        # 3. Check for Alumni
+        elif "alumni" in q or "senior" in q or "member" in q:
+            items = await db.users.find({"company": {"$exists": True, "$ne": ""}}, {"_id": 0, "full_name": 1, "company": 1}).limit(5).to_list(5)
+            if items:
+                response = "Our alumni are working at great companies! Here are a few:\n" + "\n".join([f"• {u['full_name']} is at {u['company']}" for u in items])
+            else:
+                response = "We have a large network of alumni. You can search for them in the Alumni tab."
+
+        # 4. Check for Placement
+        elif "placement" in q or "interview" in q or "salary" in q:
+            items = await db.placement_submissions.find({}, {"_id": 0}).limit(3).to_list(3)
+            if items:
+                response = "Check out these placement experiences shared by our community:\n" + "\n".join([f"• {p['user_name']} placed at {p['company']} ({p['salary']})" for p in items])
+            else:
+                response = "No placement experiences shared yet. You can check the Placement tab for interview questions!"
+
+        # 5. Check for Posts/Feed
+        elif "post" in q or "feed" in q or "news" in q:
+            items = await db.posts.find({}, {"_id": 0}).sort("created_at", -1).limit(3).to_list(3)
+            if items:
+                response = "Recent updates from the feed:\n" + "\n".join([f"• {p['user_name']}: {p['content'][:50]}..." for p in items])
+            else:
+                response = "The feed is quiet right now. Why not share something?"
+
+        else:
+            response = "I am your Alumni Assistant. You can ask me about jobs, internships, alumni members, or placement experiences! For example, try asking 'Are there any jobs?'"
         
         # Save to database
         ai_record = AIQuestion(
@@ -551,3 +594,7 @@ app.add_middleware(
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)

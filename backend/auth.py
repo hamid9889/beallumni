@@ -1,46 +1,44 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-import jwt
-from passlib.context import CryptContext
+import hashlib
 import os
+import json
+import base64
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from dotenv import load_dotenv
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key')
-JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRATION_HOURS = int(os.environ.get('JWT_EXPIRATION_HOURS', '24'))
 
+# itsdangerous serializer for tokens
+serializer = URLSafeTimedSerializer(JWT_SECRET)
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against its hash using hashlib"""
+    salt = hashed_password[:32]
+    stored_hash = hashed_password[32:]
+    new_hash = hashlib.pbkdf2_hmac('sha256', plain_password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+    return new_hash == stored_hash
 
 def get_password_hash(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
+    """Hash a password using hashlib"""
+    salt = os.urandom(16).hex()
+    hash_value = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+    return salt + hash_value
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create a JWT access token"""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
+    """Create a signed token using itsdangerous"""
+    return serializer.dumps(data)
 
 def decode_access_token(token: str) -> Optional[dict]:
-    """Decode and verify a JWT token"""
+    """Decode and verify a token using itsdangerous"""
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        return payload
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.JWTError:
+        # JWT_EXPIRATION_HOURS in seconds
+        max_age = JWT_EXPIRATION_HOURS * 3600
+        return serializer.loads(token, max_age=max_age)
+    except (BadSignature, SignatureExpired):
         return None
